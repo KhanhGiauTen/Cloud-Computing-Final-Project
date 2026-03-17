@@ -36,17 +36,19 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 if (builder.Environment.IsProduction() || builder.Environment.IsStaging())
 {
-    // Môi trường triển khai thật trên AWS (Production/Staging)
-    // AWS SDK sẽ tự động lấy credentials từ IAM Role được gán cho EC2/ECS/Beanstalk
     builder.Services.AddDefaultAWSOptions(builder.Configuration.GetAWSOptions());
-    builder.Services.AddAWSService<IAmazonSimpleNotificationService>();
     builder.Services.AddAWSService<IAmazonSimpleEmailService>();
-    builder.Services.AddScoped<INotificationService, AwsNotificationService>();
-    Console.WriteLine("Using AWS Notification Service (SES/SNS)");
+
+    builder.Services.AddHttpClient();
+
+    // ✅ FIX CHỖ NÀY
+    builder.Services.AddScoped<INotificationService, NotificationService>();
+
+    Console.WriteLine("Using AWS SES for Email and Speed SMS for SMS");
 }
 else
 {
-    // Môi trường phát triển cục bộ (Development)
+    // Môi trường Local Simulation
     builder.Services.AddScoped<INotificationService, LocalNotificationService>();
     Console.WriteLine("Using Local Notification Service (console simulation)");
 }

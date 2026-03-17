@@ -2,7 +2,7 @@ using System;
 using System.Net;
 using System.IO;
 
-namespace CloudContactManager.Services
+namespace CloudContactManager.Services.API
 {
 	class SpeedSMSAPI
 	{
