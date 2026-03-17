@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login - CloudContactManager</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" />
+    <link rel="stylesheet" href="../Shared/site-static.css" />
+    <style>
+        html, body {
+            height: 100%;
+        }
+
+        body.bg-light {
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .home-shell {
+            width: 100%;
+            max-width: none;
+            margin: 0;
+            border-radius: 0;
+            overflow: hidden;
+            background: #fff;
+            height: calc(100vh - 44px);
+        }
+
+        .home-shell > .row {
+            height: 100%;
+        }
+
+        .home-sidebar {
+            background: linear-gradient(180deg, #1b6ec2 0%, #145091 100%);
+            height: 100%;
+            color: #fff;
+        }
+
+        .home-brand {
+            font-weight: 700;
+            letter-spacing: .4px;
+            font-size: 1.15rem;
+        }
+
+        .home-menu {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .home-menu a {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+            color: rgba(255, 255, 255, 0.94);
+            padding: 12px 14px;
+            border-radius: 10px;
+            transition: background-color .2s ease, transform .2s ease;
+        }
+
+        .home-menu a:hover {
+            background: rgba(255, 255, 255, 0.18);
+            transform: translateX(3px);
+            color: #fff;
+        }
+
+        .home-menu a.active {
+            background: rgba(255, 255, 255, 0.22);
+            font-weight: 600;
+        }
+
+        .home-main {
+            background: #f8fafc;
+            height: 100%;
+            overflow: auto;
+        }
+
+        .login-panel {
+            border: 1px solid #e9eef5;
+            border-radius: 14px;
+            background: #fff;
+            padding: 24px;
+        }
+
+        .login-side-card {
+            border: 1px solid #e9eef5;
+            border-radius: 12px;
+            background: #fff;
+            padding: 16px;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="home-shell">
+        <div class="row g-0">
+            <aside class="col-lg-3 p-4 home-sidebar">
+                <div class="home-brand mb-4"><i class="bi bi-cloud-check"></i> CloudContactManager</div>
+                <ul class="home-menu d-grid gap-2">
+                    <li><a href="Index.html"><i class="bi bi-house-door"></i> Home</a></li>
+                    <li><a href="../Customers/Index.html"><i class="bi bi-people"></i> Customers</a></li>
+                    <li><a href="../Communication/Index.html"><i class="bi bi-send"></i> Send Messages</a></li>
+                    <li><a href="Privacy.html"><i class="bi bi-shield-lock"></i> Privacy</a></li>
+                </ul>
+            </aside>
+
+            <main class="col-lg-9 p-4 p-lg-5 home-main">
+                <div class="row g-3">
+                    <div class="col-lg-8">
+                        <section class="login-panel">
+                            <h4 class="mb-3"><i class="bi bi-person-lock text-primary"></i> Đăng nhập hệ thống</h4>
+
+                            <form id="loginForm">
+                                <div class="form-group mb-3">
+                                    <label class="form-label fw-bold" for="username">Username</label>
+                                    <input id="username" class="form-control" placeholder="Username" required />
+                                </div>
+
+                                <div class="form-group mb-3">
+                                    <label class="form-label fw-bold" for="password">Password</label>
+                                    <input id="password" type="password" class="form-control" placeholder="Password" required />
+                                </div>
+
+                                <div id="messageBox" class="alert d-none" role="alert"></div>
+
+                                <div class="d-grid gap-2 d-md-flex">
+                                    <button type="submit" class="btn btn-primary"><i class="bi bi-box-arrow-in-right"></i> Login</button>
+                                </div>
+                            </form>
+                        </section>
+                    </div>
+
+                    <div class="col-lg-4">
+                        <section class="login-side-card mb-3">
+                            <h6><i class="bi bi-shield-check text-primary"></i> Trạng thái đăng nhập</h6>
+                            <p class="text-muted mb-0">Đăng nhập thành công để truy cập các chức năng trong hệ thống.</p>
+                        </section>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <footer class="text-center text-muted py-2" style="height:44px;">
+        © 2026 - CloudContactManager - <a href="Privacy.html">Privacy</a>
+    </footer>
+
+    <script src="../Shared/api-config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const TOKEN_KEY = 'cloudContactJwtToken';
+        const API_BASE = window.CloudContactConfig?.apiBaseUrl || 'http://3.27.250.40';
+
+        const messageBox = document.getElementById('messageBox');
+
+        function showMessage(text, type) {
+            messageBox.className = `alert alert-${type}`;
+            messageBox.textContent = text;
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async function (event) {
+            event.preventDefault();
+
+            const payload = {
+                username: document.getElementById('username').value.trim(),
+                password: document.getElementById('password').value
+            };
+
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json().catch(() => ({}));
+
+                if (!response.ok) {
+                    throw new Error(data?.message || `HTTP ${response.status}`);
+                }
+
+                const token = data?.token || data?.Token;
+                if (!token) {
+                    throw new Error('API không trả về token.');
+                }
+
+                localStorage.setItem(TOKEN_KEY, token);
+                showMessage(data?.message || 'Đăng nhập thành công.', 'success');
+                setTimeout(() => {
+                    window.location.href = '../Customers/Index.html';
+                }, 500);
+            } catch (error) {
+                showMessage(`Đăng nhập thất bại: ${error.message}`, 'danger');
+            }
+        });
+    </script>
+</body>
+</html>
