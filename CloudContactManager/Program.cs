@@ -3,12 +3,27 @@ using CloudContactManager.Services;
 using CloudContactManager.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Amazon.SimpleEmail;
-using Amazon.SimpleNotificationService;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-builder.Services.AddControllersWithViews();
+// 1. THAY ĐỔI: Chỉ sử dụng AddControllers cho Web API, không dùng View
+builder.Services.AddControllers(); // Đã sửa lỗi chính tả
+
+// 2. THÊM MỚI: Cấu hình CORS để Frontend (như React/Vue) gọi được API
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll",
+        policy =>
+        {
+            policy.AllowAnyOrigin()
+                  .AllowAnyMethod()
+                  .AllowAnyHeader();
+        });
+});
+
+// 3. THÊM MỚI: Đăng ký Swagger để sinh tài liệu và test API
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 
 var defaultConnection = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection is missing.");
@@ -29,21 +44,14 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // ============================================================================
 // Notification Service Registration
 // ============================================================================
-// LOCAL  -> LocalNotificationService  (no AWS needed, logs to console)
-// AWS    -> AwsNotificationService    (requires IAM Role or AWS credentials)
-// Switch by checking ASP.NET Core Environment
-// ============================================================================
 
 if (builder.Environment.IsProduction() || builder.Environment.IsStaging())
 {
     builder.Services.AddDefaultAWSOptions(builder.Configuration.GetAWSOptions());
     builder.Services.AddAWSService<IAmazonSimpleEmailService>();
-
     builder.Services.AddHttpClient();
 
-    // ✅ FIX CHỖ NÀY
     builder.Services.AddScoped<INotificationService, NotificationService>();
-
     Console.WriteLine("Using AWS SES for Email and Speed SMS for SMS");
 }
 else
@@ -61,22 +69,23 @@ using (var scope = app.Services.CreateScope())
     db.Database.EnsureCreated();
 }
 
-// Configure the HTTP request pipeline.
+// 4. THAY ĐỔI: Kích hoạt Swagger UI cho tất cả các môi trường để phục vụ chấm đồ án
+app.UseSwagger();
+app.UseSwaggerUI();
+
 if (!app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/Home/Error");
     app.UseHsts();
 }
 
 app.UseHttpsRedirection();
-app.UseStaticFiles();
 
-app.UseRouting();
+// 5. THÊM MỚI: Khai báo sử dụng CORS trước Authorization và Routing
+app.UseCors("AllowAll");
 
 app.UseAuthorization();
 
-app.MapControllerRoute(
-    name: "default",
-    pattern: "{controller=Home}/{action=Index}/{id?}");
+// 6. THAY ĐỔI: Dùng MapControllers thay vì MapControllerRoute (MVC)
+app.MapControllers();
 
 app.Run();
