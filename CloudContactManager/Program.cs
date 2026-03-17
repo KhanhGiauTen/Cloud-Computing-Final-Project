@@ -7,9 +7,10 @@ using Amazon.SimpleNotificationService;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// 1. Cấu hình Controllers và Views
 builder.Services.AddControllersWithViews();
 
+// 2. Cấu hình Database (Hỗ trợ MySql cho AWS RDS và SqlServer cho Local)
 var defaultConnection = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection is missing.");
 var dbProvider = builder.Configuration["DatabaseProvider"] ?? "SqlServer";
@@ -26,40 +27,39 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     }
 });
 
-// ============================================================================
-// Notification Service Registration
-// ============================================================================
-// LOCAL  -> LocalNotificationService  (no AWS needed, logs to console)
-// AWS    -> AwsNotificationService    (requires IAM Role or AWS credentials)
-// Switch by checking ASP.NET Core Environment
-// ============================================================================
-
+// 3. Đăng ký Notification Service (QUAN TRỌNG: Chỉ dùng một khối If duy nhất)
 if (builder.Environment.IsProduction() || builder.Environment.IsStaging())
 {
-    // Môi trường triển khai thật trên AWS (Production/Staging)
-    // AWS SDK sẽ tự động lấy credentials từ IAM Role được gán cho EC2/ECS/Beanstalk
+    // Cấu hình AWS để dùng cho việc gửi Email (SES)
     builder.Services.AddDefaultAWSOptions(builder.Configuration.GetAWSOptions());
     builder.Services.AddAWSService<IAmazonSimpleNotificationService>();
     builder.Services.AddAWSService<IAmazonSimpleEmailService>();
-    builder.Services.AddScoped<INotificationService, AwsNotificationService>();
-    Console.WriteLine("Using AWS Notification Service (SES/SNS)");
+
+    // ĐĂNG KÝ SPEED SMS TẠI ĐÂY (Thay thế hoàn toàn AWS cho SMS)
+    builder.Services.AddScoped<INotificationService, SpeedSmsService>();
+
+    // In ra log để xác nhận khi app khởi động
+    Console.WriteLine("-----------------------------------------");
+    Console.WriteLine("SYSTEM: Using SpeedSMS Notification Service");
+    Console.WriteLine("-----------------------------------------");
 }
 else
 {
-    // Môi trường phát triển cục bộ (Development)
+    // Chế độ Local: Ghi log ra Console thay vì gửi tin thật
     builder.Services.AddScoped<INotificationService, LocalNotificationService>();
-    Console.WriteLine("Using Local Notification Service (console simulation)");
+    Console.WriteLine("SYSTEM: Using Local Notification Service");
 }
 
 var app = builder.Build();
 
+// 4. Tự động tạo Database nếu chưa có
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
 }
 
-// Configure the HTTP request pipeline.
+// 5. Cấu hình HTTP Request Pipeline
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
@@ -68,9 +68,7 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
-
 app.UseRouting();
-
 app.UseAuthorization();
 
 app.MapControllerRoute(
