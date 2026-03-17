@@ -1,11 +1,13 @@
 using CloudContactManager.Data;
 using CloudContactManager.Models;
 using CloudContactManager.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace CloudContactManager.Controllers
 {
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController] // Bắt buộc cho API
     public class CustomersController : ControllerBase // Đổi từ Controller sang ControllerBase
