@@ -1,15 +1,16 @@
 using CloudContactManager.Data;
 using CloudContactManager.Models;
 using CloudContactManager.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace CloudContactManager.Controllers
 {
-    /// <summary>
-    /// Controller for Customer CRUD operations.
-    /// </summary>
-    public class CustomersController : Controller
+    [Authorize]
+    [Route("api/[controller]")]
+    [ApiController] // Bắt buộc cho API
+    public class CustomersController : ControllerBase // Đổi từ Controller sang ControllerBase
     {
         private readonly AppDbContext _context;
         private readonly INotificationService _notificationService;
@@ -20,105 +21,98 @@ namespace CloudContactManager.Controllers
             _notificationService = notificationService;
         }
 
-        // GET: Customers
-
-        public async Task<IActionResult> Index()
+        // GET: api/Customers
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<Customer>>> GetCustomers()
         {
             var customers = await _context.Customers.ToListAsync();
-            return View(customers);
+            return Ok(customers); // Trả về list dạng JSON
         }
 
-        // GET: Customers/Create
-        public IActionResult Create()
+        // GET: api/Customers/5
+        [HttpGet("{id}")]
+        public async Task<ActionResult<Customer>> GetCustomer(int id)
         {
-            // TODO: Return create customer form view
-            return View();
-        }
-
-        // POST: Customers/Create
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create(Customer customer)
-        {
-            // TODO: Validate and save new customer to database
-            // TODO: Call _notificationService.SendEmailAsync() to send welcome email
-            if (ModelState.IsValid)
-            {
-                _context.Add(customer) ;
-                await _context.SaveChangesAsync();
-                return RedirectToAction(nameof(Index));
-            }    
-            return View(customer);
-        }
-
-        // GET: Customers/Edit/5
-        public async Task<IActionResult> Edit(int? id)
-        {
-            // TODO: Retrieve customer by id and return edit form view
-            if (id == null) return NotFound();
-
             var customer = await _context.Customers.FindAsync(id);
-            if (customer == null) return NotFound();
 
-            return View(customer);
-        }
-
-        // POST: Customers/Edit/5
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, Customer customer)
-        {
-            // TODO: Validate and update customer in database
-            if (id != customer.Id) return NotFound();
-
-            if (ModelState.IsValid)
+            if (customer == null)
             {
-                try
-                {
-                    _context.Update(customer);
-                    await _context.SaveChangesAsync();
-                }
-                catch (DbUpdateConcurrencyException)
-                {
-                    if (!CustomerExists(customer.Id))
-                    {
-                        return NotFound();
-                    }
-                    else
-                    {
-                        throw;
-                    }
-                }
-                return RedirectToAction(nameof(Index));
-            }
-            return View(customer);
-        }
-
-        // GET: Customers/Delete/5
-        public async Task<IActionResult> Delete(int? id)
-        {
-            if (id == null) return NotFound();
-
-            var customer = await _context.Customers.FirstOrDefaultAsync(m => m.Id == id);
-            if (customer == null) return NotFound();
-
-            return View(customer);
-        }
-
-        // POST: Customers/Delete/5
-        [HttpPost, ActionName("Delete")]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> DeleteConfirmed(int id)
-        {
-            // TODO: Delete customer from database
-            var customer = await _context.Customers.FindAsync(id);
-            if (customer != null)
-            {
-                _context.Customers.Remove(customer);
+                return NotFound(new { Message = "Không tìm thấy khách hàng." });
             }
 
+            return Ok(customer);
+        }
+
+        // POST: api/Customers
+        [HttpPost]
+        public async Task<ActionResult<Customer>> CreateCustomer([FromBody] Customer customer)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            // Gán ngày tạo nếu DB chưa tự động tạo
+            customer.CreatedAt = DateTime.UtcNow;
+
+            _context.Customers.Add(customer);
             await _context.SaveChangesAsync();
-            return RedirectToAction(nameof(Index));
+
+            // (Tuỳ chọn) TODO: Gọi _notificationService gửi email chào mừng ở đây
+
+            // Trả về code 201 Created và thông tin customer vừa tạo
+            return CreatedAtAction(nameof(GetCustomer), new { id = customer.Id }, customer);
+        }
+
+        // PUT: api/Customers/5
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdateCustomer(int id, [FromBody] Customer customer)
+        {
+            if (id != customer.Id)
+            {
+                return BadRequest(new { Message = "ID khách hàng không khớp." });
+            }
+
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            _context.Entry(customer).State = EntityState.Modified;
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!CustomerExists(id))
+                {
+                    return NotFound(new { Message = "Không tìm thấy khách hàng." });
+                }
+                else
+                {
+                    throw;
+                }
+            }
+
+            return NoContent(); // Code 204: Update thành công nhưng không cần trả về Body
+        }
+
+        // DELETE: api/Customers/5
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteCustomer(int id)
+        {
+            var customer = await _context.Customers.FindAsync(id);
+            if (customer == null)
+            {
+                return NotFound(new { Message = "Không tìm thấy khách hàng." });
+            }
+
+            _context.Customers.Remove(customer);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { Message = "Đã xóa khách hàng thành công." });
         }
 
         private bool CustomerExists(int id)
