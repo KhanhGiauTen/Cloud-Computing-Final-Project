@@ -40,7 +40,7 @@ namespace CloudContactManager.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            if (string.IsNullOrEmpty(request.MessageContent))
+            if (string.IsNullOrWhiteSpace(request.MessageContent))
             {
                 TempData["Error"] = "Message context can not be blank.";
                 return RedirectToAction(nameof(Index));
@@ -60,13 +60,22 @@ namespace CloudContactManager.Controllers
                 {
                     // Take EmailAddress column
                     recipients = selectedCustomers
-                        .Where(c => !string.IsNullOrEmpty(c.EmailAddress))
+                        .Where(c => !string.IsNullOrWhiteSpace(c.EmailAddress))
                         .Select(c => c.EmailAddress)
                         .ToList();
                 }
-                else if (request.Type == "SMS")
+                else if (request.Type.Equals("SMS", StringComparison.OrdinalIgnoreCase))
                 {
-                    // sms implenment later
+                    // Lấy cột PhoneNumber cho chức năng SMS
+                    recipients = selectedCustomers
+                        .Where(c => !string.IsNullOrWhiteSpace(c.PhoneNumber))
+                        .Select(c => c.PhoneNumber)
+                        .ToList();
+                }
+                else
+                {
+                    TempData["Error"] = "Invalid communication type. Please select Email or SMS.";
+                    return RedirectToAction(nameof(Index));
                 }
 
                 // Call bulk sending service
@@ -77,7 +86,7 @@ namespace CloudContactManager.Controllers
                 }
                 else
                 {
-                    TempData["Warning"] = "No valid recipients found in the selected list.";
+                    TempData["Warning"] = $"No valid {request.Type} addresses found in the selected list.";
                 }
             }
             catch (Exception ex)

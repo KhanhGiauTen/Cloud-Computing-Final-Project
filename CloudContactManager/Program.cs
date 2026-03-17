@@ -29,40 +29,35 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // ============================================================================
 // Notification Service Registration
 // ============================================================================
-// LOCAL  → LocalNotificationService  (no AWS needed, logs to console)
-// AWS    → AwsNotificationService    (requires AWS credentials)
-// Switch by checking if AWS credentials are available
+// LOCAL  -> LocalNotificationService  (no AWS needed, logs to console)
+// AWS    -> AwsNotificationService    (requires IAM Role or AWS credentials)
+// Switch by checking ASP.NET Core Environment
 // ============================================================================
 
-var awsProfile = builder.Configuration.GetSection("AWS")["Profile"];
-var hasAwsEnvVars = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AWS_ACCESS_KEY_ID"));
-var hasAwsProfile = false;
-
-if (!string.IsNullOrEmpty(awsProfile))
+if (builder.Environment.IsProduction() || builder.Environment.IsStaging())
 {
-    var credFile = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        ".aws", "credentials");
-    hasAwsProfile = File.Exists(credFile);
-}
-
-if (hasAwsEnvVars || hasAwsProfile)
-{
-    // AWS credentials found → use real AWS services
+    // Môi trường triển khai thật trên AWS (Production/Staging)
+    // AWS SDK sẽ tự động lấy credentials từ IAM Role được gán cho EC2/ECS/Beanstalk
     builder.Services.AddDefaultAWSOptions(builder.Configuration.GetAWSOptions());
     builder.Services.AddAWSService<IAmazonSimpleNotificationService>();
     builder.Services.AddAWSService<IAmazonSimpleEmailService>();
     builder.Services.AddScoped<INotificationService, AwsNotificationService>();
-    Console.WriteLine("✅ Using AWS Notification Service (SES/SNS)");
+    Console.WriteLine("Using AWS Notification Service (SES/SNS)");
 }
 else
 {
-    // No AWS credentials → use local simulation
+    // Môi trường phát triển cục bộ (Development)
     builder.Services.AddScoped<INotificationService, LocalNotificationService>();
-    Console.WriteLine("✅ Using Local Notification Service (console simulation)");
+    Console.WriteLine("Using Local Notification Service (console simulation)");
 }
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.EnsureCreated();
+}
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
@@ -83,5 +78,3 @@ app.MapControllerRoute(
     pattern: "{controller=Home}/{action=Index}/{id?}");
 
 app.Run();
-
-
