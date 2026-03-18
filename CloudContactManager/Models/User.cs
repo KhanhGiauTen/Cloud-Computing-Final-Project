@@ -43,4 +43,3 @@ namespace CloudContactManager.Models
         public ICollection<Customer> Customers { get; set; } = new List<Customer>();
     }
 }
-}
