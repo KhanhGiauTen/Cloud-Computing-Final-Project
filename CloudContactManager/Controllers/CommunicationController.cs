@@ -1,9 +1,11 @@
 using CloudContactManager.Data;
+using CloudContactManager.Models;
 using CloudContactManager.Services.Interfaces;
 using CloudContactManager.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace CloudContactManager.Controllers
 {
@@ -21,6 +23,22 @@ namespace CloudContactManager.Controllers
             _notificationService = notificationService;
         }
 
+        private int GetCurrentUserId()
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim))
+            {
+                throw new UnauthorizedAccessException("User id claim is missing.");
+            }
+
+            if (!int.TryParse(userIdClaim, out var userId))
+            {
+                throw new UnauthorizedAccessException("User id claim is invalid.");
+            }
+
+            return userId;
+        }
+
         // POST: api/Communication/Send
         [HttpPost("Send")]
         public async Task<IActionResult> Send([FromBody] CommunicationRequest request)
@@ -35,40 +53,95 @@ namespace CloudContactManager.Controllers
                 return BadRequest(new { Message = "Message content can not be blank." });
             }
 
+            var currentUserId = GetCurrentUserId();
+
             var selectedCustomers = await _context.Customers
-                .Where(c => request.CustomerIds.Contains(c.Id))
+                .Where(c => c.UserId == currentUserId && request.CustomerIds.Contains(c.Id))
                 .ToListAsync();
-
-            List<string> recipients;
-
-            if (request.Type.Equals("Email", StringComparison.OrdinalIgnoreCase))
-            {
-                recipients = selectedCustomers
-                    .Where(c => !string.IsNullOrWhiteSpace(c.EmailAddress))
-                    .Select(c => c.EmailAddress)
-                    .ToList();
-            }
-            else if (request.Type.Equals("SMS", StringComparison.OrdinalIgnoreCase))
-            {
-                recipients = selectedCustomers
-                    .Where(c => !string.IsNullOrWhiteSpace(c.PhoneNumber))
-                    .Select(c => c.PhoneNumber)
-                    .ToList();
-            }
-            else
-            {
-                return BadRequest(new { Message = "Invalid communication type. Use Email or SMS." });
-            }
-
-            if (!recipients.Any())
-            {
-                return NotFound(new { Message = "No valid recipients found in the selected list." });
-            }
 
             try
             {
-                await _notificationService.SendBulkAsync(recipients, request.MessageContent, request.Type);
-                return Ok(new { Message = $"Sent successfully to {recipients.Count} recipients." });
+                // Tạo campaign cho lần gửi này
+                var campaign = new Campaign
+                {
+                    UserId = currentUserId,
+                    MessageContent = request.MessageContent,
+                    CommunicationType = request.Type,
+                    SentAt = DateTime.UtcNow
+                };
+
+                _context.Campaigns.Add(campaign);
+                await _context.SaveChangesAsync();
+
+                var logs = new List<CommunicationLog>();
+                var successCount = 0;
+
+                foreach (var customer in selectedCustomers)
+                {
+                    var log = new CommunicationLog
+                    {
+                        CampaignId = campaign.Id,
+                        CustomerId = customer.Id,
+                        DeliveryStatus = "Pending"
+                    };
+
+                    try
+                    {
+                        if (request.Type.Equals("Email", StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (string.IsNullOrWhiteSpace(customer.EmailAddress))
+                            {
+                                log.DeliveryStatus = "Failed";
+                                log.ErrorMessage = "Missing email address";
+                            }
+                            else
+                            {
+                                await _notificationService.SendEmailAsync(customer.EmailAddress, "Notification", request.MessageContent);
+                                log.DeliveryStatus = "Success";
+                                successCount++;
+                            }
+                        }
+                        else if (request.Type.Equals("SMS", StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (string.IsNullOrWhiteSpace(customer.PhoneNumber))
+                            {
+                                log.DeliveryStatus = "Failed";
+                                log.ErrorMessage = "Missing phone number";
+                            }
+                            else
+                            {
+                                await _notificationService.SendSmsAsync(customer.PhoneNumber, request.MessageContent);
+                                log.DeliveryStatus = "Success";
+                                successCount++;
+                            }
+                        }
+                        else
+                        {
+                            log.DeliveryStatus = "Failed";
+                            log.ErrorMessage = "Invalid communication type";
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        log.DeliveryStatus = "Failed";
+                        log.ErrorMessage = ex.Message;
+                    }
+
+                    logs.Add(log);
+                }
+
+                if (logs.Count > 0)
+                {
+                    _context.CommunicationLogs.AddRange(logs);
+                    await _context.SaveChangesAsync();
+                }
+
+                if (successCount == 0)
+                {
+                    return StatusCode(500, new { Message = "No messages were sent successfully." });
+                }
+
+                return Ok(new { Message = $"Sent successfully to {successCount} recipients.", CampaignId = campaign.Id });
             }
             catch (Exception ex)
             {

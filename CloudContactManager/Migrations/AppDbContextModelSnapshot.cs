@@ -11,84 +11,204 @@ namespace CloudContactManager.Migrations
     [DbContext(typeof(AppDbContext))]
     partial class AppDbContextModelSnapshot : ModelSnapshot
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
-        {
+		protected override void BuildModel(ModelBuilder modelBuilder)
+		{
 #pragma warning disable 612, 618
-            modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.0");
+			modelBuilder
+				.HasAnnotation("ProductVersion", "8.0.0");
 
-            // User entity (tenants)
-            modelBuilder.Entity("CloudContactManager.Models.User", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd();
+			// Subscription plans
+			modelBuilder.Entity("CloudContactManager.Models.SubscriptionPlan", b =>
+				{
+					b.Property<int>("Id")
+						.ValueGeneratedOnAdd();
 
-                    b.Property<DateTime>("CreatedAt");
+					b.Property<int>("MaxCustomers");
 
-                    b.Property<string>("Email")
-                        .IsRequired();
+					b.Property<string>("PlanName")
+						.IsRequired()
+						.HasMaxLength(100);
 
-                    b.Property<string>("PasswordHash")
-                        .IsRequired();
+					b.Property<decimal>("Price");
 
-                    b.Property<string>("Username")
-                        .IsRequired()
-                        .HasMaxLength(50);
+					b.HasKey("Id");
 
-                    b.HasKey("Id");
+					b.ToTable("SubscriptionPlans");
+				});
 
-                    b.HasIndex("Username")
-                        .IsUnique();
+			// Users (tenants)
+			modelBuilder.Entity("CloudContactManager.Models.User", b =>
+				{
+					b.Property<int>("Id")
+						.ValueGeneratedOnAdd();
 
-                    b.ToTable("Users");
-                });
+					b.Property<string>("CompanyName")
+						.HasMaxLength(200);
 
-            // Customer entity with foreign key to User
-            modelBuilder.Entity("CloudContactManager.Models.Customer", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd();
+					b.Property<DateTime>("CreatedAt");
 
-                    b.Property<string>("Address");
+					b.Property<string>("Email")
+						.IsRequired();
 
-                    b.Property<DateTime>("CreatedAt");
+					b.Property<int?>("PlanId");
 
-                    b.Property<string>("EmailAddress")
-                        .IsRequired();
+					b.Property<string>("PasswordHash")
+						.IsRequired();
 
-                    b.Property<string>("FullName")
-                        .IsRequired()
-                        .HasMaxLength(100);
+					b.Property<string>("Username")
+						.IsRequired()
+						.HasMaxLength(50);
 
-                    b.Property<string>("PhoneNumber")
-                        .IsRequired();
+					b.HasKey("Id");
 
-                    b.Property<int>("UserId");
+					b.HasIndex("PlanId");
 
-                    b.HasKey("Id");
+					b.HasIndex("Username")
+						.IsUnique();
 
-                    b.HasIndex("UserId");
+					b.ToTable("Users");
+				});
 
-                    b.ToTable("Customers");
-                });
+			// Customers
+			modelBuilder.Entity("CloudContactManager.Models.Customer", b =>
+				{
+					b.Property<int>("Id")
+						.ValueGeneratedOnAdd();
 
-            // Relationships
-            modelBuilder.Entity("CloudContactManager.Models.Customer", b =>
-                {
-                    b.HasOne("CloudContactManager.Models.User", "User")
-                        .WithMany("Customers")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+					b.Property<string>("Address");
 
-                    b.Navigation("User");
-                });
+					b.Property<DateTime>("CreatedAt");
 
-            modelBuilder.Entity("CloudContactManager.Models.User", b =>
-                {
-                    b.Navigation("Customers");
-                });
+					b.Property<string>("EmailAddress")
+						.IsRequired();
+
+					b.Property<string>("FullName")
+						.IsRequired()
+						.HasMaxLength(100);
+
+					b.Property<string>("PhoneNumber")
+						.IsRequired();
+
+					b.Property<int>("UserId");
+
+					b.HasKey("Id");
+
+					b.HasIndex("UserId");
+
+					b.ToTable("Customers");
+				});
+
+			// Campaigns
+			modelBuilder.Entity("CloudContactManager.Models.Campaign", b =>
+				{
+					b.Property<int>("Id")
+						.ValueGeneratedOnAdd();
+
+					b.Property<string>("CommunicationType")
+						.IsRequired();
+
+					b.Property<string>("MessageContent")
+						.IsRequired();
+
+					b.Property<DateTime>("SentAt");
+
+					b.Property<int>("UserId");
+
+					b.HasKey("Id");
+
+					b.HasIndex("UserId");
+
+					b.ToTable("Campaigns");
+				});
+
+			// Communication logs
+			modelBuilder.Entity("CloudContactManager.Models.CommunicationLog", b =>
+				{
+					b.Property<int>("Id")
+						.ValueGeneratedOnAdd();
+
+					b.Property<int>("CampaignId");
+
+					b.Property<int>("CustomerId");
+
+					b.Property<string>("DeliveryStatus")
+						.IsRequired();
+
+					b.Property<string>("ErrorMessage");
+
+					b.Property<string>("ExternalId");
+
+					b.HasKey("Id");
+
+					b.HasIndex("CampaignId");
+
+					b.HasIndex("CustomerId");
+
+					b.ToTable("CommunicationLogs");
+				});
+
+			// Relationships
+			modelBuilder.Entity("CloudContactManager.Models.User", b =>
+				{
+					b.HasOne("CloudContactManager.Models.SubscriptionPlan", "Plan")
+						.WithMany("Tenants")
+						.HasForeignKey("PlanId")
+						.OnDelete(DeleteBehavior.Restrict);
+
+					b.Navigation("Plan");
+				});
+
+			modelBuilder.Entity("CloudContactManager.Models.Customer", b =>
+				{
+					b.HasOne("CloudContactManager.Models.User", "User")
+						.WithMany("Customers")
+						.HasForeignKey("UserId")
+						.OnDelete(DeleteBehavior.Cascade)
+						.IsRequired();
+
+					b.Navigation("User");
+				});
+
+			modelBuilder.Entity("CloudContactManager.Models.Campaign", b =>
+				{
+					b.HasOne("CloudContactManager.Models.User", "User")
+						.WithMany()
+						.HasForeignKey("UserId")
+						.OnDelete(DeleteBehavior.Cascade)
+						.IsRequired();
+
+					b.Navigation("User");
+				});
+
+			modelBuilder.Entity("CloudContactManager.Models.CommunicationLog", b =>
+				{
+					b.HasOne("CloudContactManager.Models.Campaign", "Campaign")
+						.WithMany("CommunicationLogs")
+						.HasForeignKey("CampaignId")
+						.OnDelete(DeleteBehavior.Cascade)
+						.IsRequired();
+
+					b.HasOne("CloudContactManager.Models.Customer", "Customer")
+						.WithMany()
+						.HasForeignKey("CustomerId")
+						.OnDelete(DeleteBehavior.Cascade)
+						.IsRequired();
+
+					b.Navigation("Campaign");
+
+					b.Navigation("Customer");
+				});
+
+			modelBuilder.Entity("CloudContactManager.Models.SubscriptionPlan", b =>
+				{
+					b.Navigation("Tenants");
+				});
+
+			modelBuilder.Entity("CloudContactManager.Models.User", b =>
+				{
+					b.Navigation("Customers");
+				});
 #pragma warning restore 612, 618
-        }
+		}
     }
 }
