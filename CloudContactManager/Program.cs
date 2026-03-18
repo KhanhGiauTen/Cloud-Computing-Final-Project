@@ -120,7 +120,17 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
+    // Apply any pending EF Core migrations on startup
+    try
+    {
+        db.Database.Migrate();
+    }
+    catch (Exception ex)
+    {
+        // In design-time tools (dotnet ef) or when DB is unreachable,
+        // skip automatic migration but log the issue.
+        Console.WriteLine($"Database migration failed: {ex.Message}");
+    }
 }
 
 // 4. Kích hoạt Swagger UI cho tất cả các môi trường để phục vụ chấm đồ án
