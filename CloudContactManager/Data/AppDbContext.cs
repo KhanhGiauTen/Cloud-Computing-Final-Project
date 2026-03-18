@@ -23,37 +23,71 @@ namespace CloudContactManager.Data
         {
             base.OnModelCreating(modelBuilder);
 
-            // Configure entity relationships and constraints
+            // ================= FIX MYSQL DATA TYPES =================
 
-            // User (tenant) -> Customers one-to-many relationship
+            modelBuilder.Entity<Customer>(entity =>
+            {
+                entity.Property(e => e.FullName).HasColumnType("varchar(100)");
+                entity.Property(e => e.Address).HasColumnType("text");
+                entity.Property(e => e.PhoneNumber).HasColumnType("varchar(20)");
+                entity.Property(e => e.EmailAddress).HasColumnType("varchar(255)");
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime");
+            });
+
+            modelBuilder.Entity<User>(entity =>
+            {
+                entity.Property(e => e.Username).HasColumnType("varchar(50)");
+                entity.Property(e => e.CompanyName).HasColumnType("varchar(200)");
+                entity.Property(e => e.Email).HasColumnType("varchar(255)");
+                entity.Property(e => e.PasswordHash).HasColumnType("text");
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime");
+            });
+
+            modelBuilder.Entity<SubscriptionPlan>(entity =>
+            {
+                entity.Property(e => e.PlanName).HasColumnType("varchar(100)");
+            });
+
+            modelBuilder.Entity<Campaign>(entity =>
+            {
+                entity.Property(e => e.CommunicationType).HasColumnType("varchar(50)");
+                entity.Property(e => e.MessageContent).HasColumnType("text");
+                entity.Property(e => e.SentAt).HasColumnType("datetime");
+            });
+
+            modelBuilder.Entity<CommunicationLog>(entity =>
+            {
+                entity.Property(e => e.DeliveryStatus).HasColumnType("varchar(50)");
+                entity.Property(e => e.ErrorMessage).HasColumnType("text");
+                entity.Property(e => e.ExternalId).HasColumnType("varchar(255)");
+            });
+
+            // ================= RELATIONSHIPS =================
+
             modelBuilder.Entity<User>()
                 .HasMany(u => u.Customers)
                 .WithOne(c => c.User!)
                 .HasForeignKey(c => c.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // SubscriptionPlan -> Users (tenants) one-to-many
             modelBuilder.Entity<SubscriptionPlan>()
                 .HasMany(p => p.Tenants)
                 .WithOne(u => u.Plan)
                 .HasForeignKey(u => u.PlanId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // User (tenant) -> Campaigns one-to-many
             modelBuilder.Entity<User>()
                 .HasMany<Campaign>()
                 .WithOne(c => c.User!)
                 .HasForeignKey(c => c.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // Campaign -> CommunicationLogs one-to-many
             modelBuilder.Entity<Campaign>()
                 .HasMany(c => c.CommunicationLogs)
                 .WithOne(l => l.Campaign!)
                 .HasForeignKey(l => l.CampaignId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // Customer -> CommunicationLogs one-to-many
             modelBuilder.Entity<Customer>()
                 .HasMany<CommunicationLog>()
                 .WithOne(l => l.Customer!)
