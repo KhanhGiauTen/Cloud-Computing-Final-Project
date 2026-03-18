@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+
 namespace CloudContactManager.Models
 {
     /// <summary>
@@ -28,5 +29,16 @@ namespace CloudContactManager.Models
         public string EmailAddress { get; set; } = string.Empty;
 
         public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+        /// <summary>
+        /// Foreign key to the owning user (tenant).
+        /// </summary>
+        [Required]
+        public int UserId { get; set; }
+
+        /// <summary>
+        /// Navigation to the owning user.
+        /// </summary>
+        public User? User { get; set; }
     }
 }

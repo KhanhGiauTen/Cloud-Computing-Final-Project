@@ -1,7 +1,9 @@
 ﻿using Amazon.SimpleEmail;
 using Amazon.SimpleEmail.Model;
 using CloudContactManager.Services.Interfaces;
-using CloudContactManager.Services.API;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
 
 namespace CloudContactManager.Services
 {
@@ -9,13 +11,19 @@ namespace CloudContactManager.Services
     {
         private readonly IAmazonSimpleEmailService _sesClient;
         private readonly IConfiguration _configuration;
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly ILogger<NotificationService> _logger;
 
         public NotificationService(
             IAmazonSimpleEmailService sesClient,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IHttpClientFactory httpClientFactory,
+            ILogger<NotificationService> logger)
         {
             _sesClient = sesClient;
             _configuration = configuration;
+            _httpClientFactory = httpClientFactory;
+            _logger = logger;
         }
 
         // ================= EMAIL (AWS SES) =================
@@ -53,18 +61,41 @@ namespace CloudContactManager.Services
         // ================= SMS (SpeedSMS) =================
         public async Task SendSmsAsync(string phoneNumber, string message)
         {
-            string token = _configuration["SpeedSMS:AccessToken"];
-            string sender = _configuration["SpeedSMS:Device"];
+            var token = _configuration["SpeedSMS:AccessToken"];
+            var device = _configuration["SpeedSMS:Device"];
 
-            var api = new SpeedSMSAPI(token);
+            if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(device))
+            {
+                _logger.LogWarning("SpeedSMS configuration is missing. Skipping SMS send.");
+                return;
+            }
 
-            string[] phones = new string[] { phoneNumber };
+            var client = _httpClientFactory.CreateClient();
 
-            int type = SpeedSMSAPI.TYPE_GATEWAY;
+            // Basic auth with token as username and ":x" as password per SpeedSMS docs
+            var authBytes = Encoding.ASCII.GetBytes($"{token}:x");
+            client.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("Basic", Convert.ToBase64String(authBytes));
 
-            string response = api.sendSMS(phones, message, type, sender);
+            var payload = new
+            {
+                to = new[] { phoneNumber },
+                content = message,
+                sms_type = 2,
+                sender = device
+            };
 
-            await Task.CompletedTask;
+            var json = JsonSerializer.Serialize(payload);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var response = await client.PostAsync("https://api.speedsms.vn/index.php/sms/send", content);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+                _logger.LogError("SpeedSMS send failed. StatusCode={StatusCode}, Body={Body}",
+                    (int)response.StatusCode, errorBody);
+            }
         }
 
         // ================= BULK =================
@@ -79,16 +110,10 @@ namespace CloudContactManager.Services
             }
             else if (type.Equals("SMS", StringComparison.OrdinalIgnoreCase))
             {
-                string token = _configuration["SpeedSMS:AccessToken"];
-                string sender = _configuration["SpeedSMS:Device"];
-
-                var api = new SpeedSMSAPI(token);
-
-                string[] phones = recipients.ToArray();
-
-                int smsType = SpeedSMSAPI.TYPE_GATEWAY;
-
-                string response = api.sendSMS(phones, message, smsType, sender);
+                foreach (var phone in recipients)
+                {
+                    await SendSmsAsync(phone, message);
+                }
             }
         }
     }

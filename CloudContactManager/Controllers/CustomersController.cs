@@ -4,6 +4,7 @@ using CloudContactManager.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace CloudContactManager.Controllers
 {
@@ -21,11 +22,31 @@ namespace CloudContactManager.Controllers
             _notificationService = notificationService;
         }
 
+        private int GetCurrentUserId()
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim))
+            {
+                throw new UnauthorizedAccessException("User id claim is missing.");
+            }
+
+            if (!int.TryParse(userIdClaim, out var userId))
+            {
+                throw new UnauthorizedAccessException("User id claim is invalid.");
+            }
+
+            return userId;
+        }
+
         // GET: api/Customers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Customer>>> GetCustomers()
         {
-            var customers = await _context.Customers.ToListAsync();
+            var currentUserId = GetCurrentUserId();
+
+            var customers = await _context.Customers
+                .Where(c => c.UserId == currentUserId)
+                .ToListAsync();
             return Ok(customers); // Trả về list dạng JSON
         }
 
@@ -33,7 +54,10 @@ namespace CloudContactManager.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<Customer>> GetCustomer(int id)
         {
-            var customer = await _context.Customers.FindAsync(id);
+            var currentUserId = GetCurrentUserId();
+
+            var customer = await _context.Customers
+                .FirstOrDefaultAsync(c => c.Id == id && c.UserId == currentUserId);
 
             if (customer == null)
             {
@@ -52,8 +76,11 @@ namespace CloudContactManager.Controllers
                 return BadRequest(ModelState);
             }
 
-            // Gán ngày tạo nếu DB chưa tự động tạo
+            var currentUserId = GetCurrentUserId();
+
+            // Gán ngày tạo và user sở hữu bản ghi
             customer.CreatedAt = DateTime.UtcNow;
+            customer.UserId = currentUserId;
 
             _context.Customers.Add(customer);
             await _context.SaveChangesAsync();
@@ -68,42 +95,44 @@ namespace CloudContactManager.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateCustomer(int id, [FromBody] Customer customer)
         {
-            if (id != customer.Id)
-            {
-                return BadRequest(new { Message = "ID khách hàng không khớp." });
-            }
-
             if (!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
             }
+            var currentUserId = GetCurrentUserId();
 
-            _context.Entry(customer).State = EntityState.Modified;
+            var existingCustomer = await _context.Customers
+                .FirstOrDefaultAsync(c => c.Id == id && c.UserId == currentUserId);
 
-            try
+            if (existingCustomer == null)
             {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!CustomerExists(id))
-                {
-                    return NotFound(new { Message = "Không tìm thấy khách hàng." });
-                }
-                else
-                {
-                    throw;
-                }
+                return NotFound(new { Message = "Không tìm thấy khách hàng." });
             }
 
-            return NoContent(); // Code 204: Update thành công nhưng không cần trả về Body
+            if (existingCustomer.UserId != currentUserId)
+            {
+                return Forbid();
+            }
+
+            // Cập nhật các trường cho phép chỉnh sửa, không cho đổi UserId
+            existingCustomer.FullName = customer.FullName;
+            existingCustomer.Address = customer.Address;
+            existingCustomer.PhoneNumber = customer.PhoneNumber;
+            existingCustomer.EmailAddress = customer.EmailAddress;
+
+            await _context.SaveChangesAsync();
+
+            return NoContent();
         }
 
         // DELETE: api/Customers/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteCustomer(int id)
         {
-            var customer = await _context.Customers.FindAsync(id);
+            var currentUserId = GetCurrentUserId();
+
+            var customer = await _context.Customers
+                .FirstOrDefaultAsync(c => c.Id == id && c.UserId == currentUserId);
             if (customer == null)
             {
                 return NotFound(new { Message = "Không tìm thấy khách hàng." });
